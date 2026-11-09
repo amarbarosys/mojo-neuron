@@ -1,0 +1,7 @@
+# Prereg G0 amendment D: T1b also has too few mistakes, T1c replaces it (written 2026-11-09 after the T1b mining run, before any T1c run)
+
+Receipt: `.work/impl-mul/run-mine/out.jsonl` (same engine and settings as amendment C): two-digit multiplication, 4000 problems, 28 mistakes (0.7 %); split 14 train, 6 dev, 8 test. Under G0 and amendment C: **T1b gets no verdict (UNDERPOWERED, 8 test mistakes)**; its capture, select and eval stages were stopped
+before any GPU time was spent on them. Together with T1 (0 of 3645 wrong) this is a finding about the model: Qwythos-9B does two-digit addition and multiplication almost without error, so there is almost nothing there to correct.
+Change: the generalisation family is T1c, three-digit times three-digit products `Q: What is a * b? A:` with a, b in 100..999 (810000 distinct problems, shuffled with seed 1, first 4000), up to 10 generated tokens (answers have up to 6 digits), mined, split (50/20/30) and run exactly as T1 was specified.
+Bars, splits, k sweep, control, statistics, the layer chosen on dev: unchanged. If T1c also gives fewer than 30 test mistakes it gets no verdict and T3 (code idiom) is next; no further arithmetic family will be tried.
+The sequence T1, T1b, T1c is reported in full whatever T1c shows; choosing a harder family after two empty ones is a change of the task's difficulty, not of its kind or of any bar, and the report says that.

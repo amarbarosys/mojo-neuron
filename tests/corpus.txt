@@ -1,0 +1,194 @@
+# mojo-neuron plan
+
+Find, rank and steer single MLP neurons of GGUF models on mojo-baro, and export them as llama.cpp
+control vectors. About 600 LOC of Mojo, because GGUF reading, dequantization and the GPU forward
+already exist in our libraries. Not a trainer. MoE experts are out of scope for now.
+
+Ideas come from gguf-neuron-explorer (`gne`, MIT) and neuron-explorer (MIT). Written clean-room in
+Mojo; no code copied.
+
+## Reuse (surveyed 2026-11-04)
+
+| need | reuse | state |
+|---|---|---|
+| GGUF read, dequant of all quant types | mojo-gguf `gguf.model.Gguf`, `gguf.dequant.deq_rows` | done |
+| thread pool | mojo-gguf `gguf.par.parallelize` | done |
+| GPU forward, 6 archs | mojo-baro `serve/spark.mojo` (llama, qwen2, granite), `serve/engine.mojo` (qwen35) | done |
+| per-layer residual hook | baro branch `ablate`: `BARO_DUMP_LAYERS`, `BARO_ABLATE` (host-side, spark only) | partial |
+| logits dump | baro `BARO_DUMP_LOGITS` | done |
+| TPE, KL | mojo-ablate `src/tpe.mojo`, `src/kl.mojo` | done |
+| UI | gne `gne/ui/static` (vanilla JS) served as static files | later |
+
+## Steps
+
+Each step lands as its own commit, with its gate written first.
+
+| # | item | LOC | performance target | oracle |
+|---|---|---|---|---|
+| 1 | `lens`: logit lens for every neuron of a layer, CPU | S | Qwen2.5-0.5B layer in < 5 s | f64 brute force on sampled neurons, plus a mutant |
+| 2 | baro `BARO_STEER`: add one f32 vector per layer into X after the FFN, GPU kernel, no host sync | S | decode cost < 1 % | zero vector byte-identical; greedy equals llama.cpp `--control-vector` |
+| 3 | `cvec`: write `.cvec.gguf` (`direction.L`, arch `controlvector`) from a recipe `L:N:dose,...` | S | n/a | llama-cli loads it; greedy equals step 2 |
+| 4 | `sweep`: one resident baro process runs neurons x doses x prompts | M | engine startup paid once | same tokens as one-shot runs |
+| 5 | `rank`: word-cluster mass against random-direction controls | S | < 1 s per layer, host-side | hand-built rollout golden |
+| 6 | serve the gne UI and an MCP server over steps 1 to 5 | M | n/a | UI looked at in the browser |
+
+Step 2 is measured first. If the hook costs more than 1 % of decode, it moves into the FFN down
+gemv epilogue.
+
+## Lens math
+
+For neuron n of layer L: g = unit(W_down[:, n]) * output_norm_weight, logits = W_U g. Keep the top
+and bottom k tokens. One pass over W_U per layer: each vocab row is dotted with every neuron while
+the neuron block stays in L3.
+
+## Gates
+
+`scripts/check.sh` runs every test capped with
+`systemd-run --user --scope -p MemoryMax=4G -- timeout 300`. GPU work goes through `gpu-wait run`.
+# Parity checklist
+
+Each row: feature of gne (G) or neuron-explorer (N), owner lane, gate that ticks it. `[ ]` open, `[x]` ticked with gate name.
+Matrix of model x feature is added at the end of the lane (PASS / UNSUPPORTED(reason)).
+
+| # | feature | src | lane | gate |
+|---|---|---|---|---|
+| 1 | logit lens, every neuron of a layer, CPU | G N | app | [x] `scripts/check.sh` lens (step 1) |
+| 2 | lens for every tier A+B arch | G | app | [x] `scripts/lens-matrix.sh`, docs/matrix.md |
+| 3 | R lens / J++ lens (own builder) | N | app | [ ] |
+| 4 | rank: word-cluster mass vs random controls | G N | app | [x] `tests/rank.sh` golden + 2 mutants |
+| 5 | steer lens (next-token dlogprob at +-dose) | G | engine | [ ] |
+| 6 | reverse lookup: persona contrast -> cosine rank all layers | G | engine | [ ] |
+| 7 | sweep neurons x doses x prompts, resident | G | engine | [ ] |
+| 8 | BARO_STEER add vector per layer on GPU | G | engine | [ ] |
+| 9 | cvec export `.cvec.gguf`, llama.cpp loads it | G | engine | [ ] |
+| 10 | ablation (neuron zero, directional) | G | engine | [ ] |
+| 11 | activations: `fires` over user text, filter neurons | N G | app | [x] `tests/calls.sh` fires + `fires_check` vs llama.cpp |
+| 12 | connections up/downstream (weight cosine) | N G | app | [x] `conn_check` + `tests/calls.sh` |
+| 13 | dossier per neuron | G | app | [x] `tests/calls.sh` dossier |
+| 14 | recipes `L:N:dose,...` parse, compose, export | G | app | [x] `tests/calls.sh` recipe |
+| 15 | 3-column steered chat (-, 0, +) | G N | app (engine sweep) | [~] panel shows sweep rollouts; live generation stub, UNVERIFIED until engine sweep |
+| 16 | map view (layers x neurons) | G N | app | [x] `tests/app.sh` map view |
+| 17 | list view (rank, lens search by token) | N | app | [x] `tests/app.sh` list view, token search |
+| 18 | neuron view | N | app | [x] `tests/app.sh` neuron view |
+| 19 | MCP server over the same calls | G N | app | [x] `tests/mcp.sh` pipe, `tests/mcp_client.sh` real Claude client |
+| 20 | brain-net export: explored neuron -> note; `brain-ask` finds it | new | app | [x] `tests/calls.sh` brain-ask |
+| 21 | gain steering `xN`, LoRA export | G | out of scope v1 | UNSUPPORTED(not planned) |
+| 22 | heads, MoE experts, audio, FineFineWeb contexts, UMAP | G N | out of scope v1 | UNSUPPORTED(not planned) |
+| 23 | OpenAI-compatible endpoint with `when` | G | out of scope v1 | UNSUPPORTED(not planned) |
+# Model x feature matrix (lane app)
+
+Cells: PASS, or UNSUPPORTED(reason). Lens = `lens` golden (f64 brute force of sampled neurons + neighbour mutant) and a `lens.bin` for the shared store.
+Rows measured 2026-11-09 with `scripts/lens-matrix.sh` (seconds = golden + bin for one layer, CPU).
+
+| model | arch | lens layer | lens golden | lens.bin | seconds | fires (CPU forward) |
+|---|---|---|---|---|---|---|
+| qwen2.5-0.5b-instruct q4_K_M | qwen2 | 12 | PASS | PASS | 11 | PASS (bf16 file vs llama.cpp) |
+| vibethinker-1.5b q4_K_M | qwen2 | 14 | PASS | PASS | 26 | UNVERIFIED (same code path as qwen2) |
+| llama-3.2-1b-instruct q4_K_M | llama | 8 | PASS | PASS | 30 | PASS |
+| minicpm5-2b q4_K_M | llama | 20 | PASS | PASS | 26 | UNVERIFIED (minicpm scales not modelled) |
+| granite-4.2-3b bf16 | granite | 20 | PASS | PASS | 36 | PASS |
+| spark-x2.5-4b q4_K_M | spark2_5 | 18 | PASS | PASS | 67 | UNSUPPORTED(arch spark2_5 has no CPU forward yet) |
+| ornith-1.5-9b q4_K_M | qwen35 | 16 | PASS | PASS | 193 | UNSUPPORTED(hybrid linear attention, no CPU forward) |
+| qwen3.8-27b obliterated q4_K_M | qwen35 | 32 | skipped (27B check needs 5 GB of W_U in RAM) | PASS | 175 | UNSUPPORTED(hybrid linear attention) |
+| lily-cybersecurity-7b IQ1_S | llama | 16 | skipped | PASS | 15 | UNVERIFIED |
+| TriLM-1.5B TQ2_0 | llama | 12 | UNSUPPORTED(ggml type 35 TQ2_0 has no dequantizer in mojo-gguf) | UNSUPPORTED(same) | 0 | UNSUPPORTED(same) |
+| RegesCore 35B, qwen3.8-flash-next (MoE) | qwen35moe, qwen4exp | n/a | UNSUPPORTED(MoE experts out of scope) | UNSUPPORTED | n/a | UNSUPPORTED |
+| bge-m3 | bert | n/a | UNSUPPORTED(encoder, no output head) | UNSUPPORTED | n/a | UNSUPPORTED |
+# Rules
+
+`what broke -> the rule`
+
+- `lens` returned the same special tokens for every neuron after the ggufx sync -> mojo-gguf v0.2.1 had lost the heap thread context fix (deq_rows wrote zeros, output_norm read as 0). A model output identical for all units: dump the raw z and the norm weights before suspecting the math. Gate `scripts/check.sh` runs lens on real weights, so it catches this.
+- A parameter or field named `out` did not parse (twice) -> `out` is a Mojo keyword: use `nout`, `root`, `dir`.
+- Brain mutant query "zzqxjv neuron layer 12 qwen2.5" still found the neuron through shared words -> a mutant query must carry only the discriminating token.
+- A total sum of activations could not tell my reversed-token mutant apart (sums cancel) -> compare the per-element head and tail values llama.cpp prints, not the tensor sum.
+- llama.cpp prunes the last layer to the output positions and elides tokens when a prompt has more than 6 tokens -> the oracle uses prompts of at most 6 tokens and skips the last layer.
+- imkit font atlas is ASCII 32 to 126 and the draw list holds 4096 commands (one per glyph) -> the app sanitizes every token to ASCII and budgets text per frame.
+- MCP server passed a pipe gate but failed under Claude Code ("Connection closed"): `input()` returned EOF after the first line and `/dev/stdin` cannot be opened when the client gives a socket -> read fd 0 with `read(2)`, and gate it with a real client (`tests/mcp_client.sh`), not only a pipe.
+# App
+
+`scripts/build-app.sh` then `.work/app` (store: `MNEURON_DIR`, default the shared `.work/neurons` of the main repo).
+Views: **map** (layers x 40 neuron buckets, colour = best lens score, click a cell), **list** (ranked by lens score or sweep rank,
+token search over the lens, page buttons or wheel), **neuron** (lens, connections up/down clickable, fires on your text, recipe buttons,
+brain note, dossier file, steered chat panel). Every button runs a call from `src/mneuron/calls.mojo`, the same code as the CLI and MCP.
+
+The steered chat shows rollouts from `<layer>.sweep.jsonl` for the neuron (engine lane). Live generation is a stub: UNVERIFIED until the
+engine's sweep is wired in.
+
+Script mode for checks: `MNEURON_SCRIPT=file .work/app` with lines `frame`, `wait N`, `click X Y`, `text S`, `wheel D`, `shot PNG`;
+at exit it prints one `STATE ...` line. `tests/app.sh` is the gate, `tests/app_script.txt` the script. Needs a display and the GPU
+(imkit composes the UI on the GPU; not a compute job).
+# Provenance
+
+Ideas only, no code copied. Both projects are MIT; their licence texts sit in their repos.
+
+| source | what we took (idea) | where we differ |
+|---|---|---|
+| gguf-neuron-explorer (`gne`), `~/Projects/imports/gguf-neuron-explorer-main` | sweep+rank against random controls, logit/steer lens, reverse lookup, dossier, recipes `L:N:dose`, 3-column chat, cvec export, MCP | Mojo, resident process, CPU lens in seconds |
+| neuron-explorer, `~/Projects/imports/neuron-explorer-main` | map/list/neuron views, `fires` over user text, connections up/down, R and J++ lens, name per neuron | mojo-imkit native app, any GGUF arch |
+| bubskee/qwen3.5-4b-r-jpp-lenses (Apache-2.0) | downloaded maps used only as oracle for our own R/J++ builder on Qwen3.5-4B | our builder runs for every model |
+
+Own code reused: `src/mneuron/pngw.mojo` is `stock-review/src/stock_review/pngw.mojo` (same owner). App pattern (script events, shots) follows stock-review.
+# mojo-neuron
+
+Find, rank and steer single MLP neurons of GGUF models, in Mojo, on mojo-baro. Plan: `docs/plan.md`.
+
+## lens
+
+Logit lens of every neuron of one layer, on CPU:
+
+    lens MODEL.gguf LAYER K          # one line per neuron: n, top K tokens, bottom K tokens (sep U+241F)
+    lens MODEL.gguf LAYER K CHECK    # f64 brute-force golden on CHECK sampled neurons + neighbour mutant
+
+Qwen2.5-0.5B Q4_K_M, layer 12 (4864 neurons x 151936 tokens): 4.2 s on a 7800X3D.
+
+Gate: `scripts/check.sh` (qwen2 and llama). Build needs mojo-gguf at or after `f56d2a3`.
+
+Ideas from gguf-neuron-explorer and neuron-explorer (both MIT); no code copied.
+# mojo-neuron plan
+
+Find, rank and steer single MLP neurons of GGUF models on mojo-baro, and export them as llama.cpp
+control vectors. About 600 LOC of Mojo, because GGUF reading, dequantization and the GPU forward
+already exist in our libraries. Not a trainer. MoE experts are out of scope for now.
+
+Ideas come from gguf-neuron-explorer (`gne`, MIT) and neuron-explorer (MIT). Written clean-room in
+Mojo; no code copied.
+
+## Reuse (surveyed 2026-11-04)
+
+| need | reuse | state |
+|---|---|---|
+| GGUF read, dequant of all quant types | mojo-gguf `gguf.model.Gguf`, `gguf.dequant.deq_rows` | done |
+| thread pool | mojo-gguf `gguf.par.parallelize` | done |
+| GPU forward, 6 archs | mojo-baro `serve/spark.mojo` (llama, qwen2, granite), `serve/engine.mojo` (qwen35) | done |
+| per-layer residual hook | baro branch `ablate`: `BARO_DUMP_LAYERS`, `BARO_ABLATE` (host-side, spark only) | partial |
+| logits dump | baro `BARO_DUMP_LOGITS` | done |
+| TPE, KL | mojo-ablate `src/tpe.mojo`, `src/kl.mojo` | done |
+| UI | gne `gne/ui/static` (vanilla JS) served as static files | later |
+
+## Steps
+
+Each step lands as its own commit, with its gate written first.
+
+| # | item | LOC | performance target | oracle |
+|---|---|---|---|---|
+| 1 | `lens`: logit lens for every neuron of a layer, CPU | S | Qwen2.5-0.5B layer in < 5 s | f64 brute force on sampled neurons, plus a mutant |
+| 2 | baro `BARO_STEER`: add one f32 vector per layer into X after the FFN, GPU kernel, no host sync | S | decode cost < 1 % | zero vector byte-identical; greedy equals llama.cpp `--control-vector` |
+| 3 | `cvec`: write `.cvec.gguf` (`direction.L`, arch `controlvector`) from a recipe `L:N:dose,...` | S | n/a | llama-cli loads it; greedy equals step 2 |
+| 4 | `sweep`: one resident baro process runs neurons x doses x prompts | M | engine startup paid once | same tokens as one-shot runs |
+| 5 | `rank`: word-cluster mass against random-direction controls | S | < 1 s per layer, host-side | hand-built rollout golden |
+| 6 | serve the gne UI and an MCP server over steps 1 to 5 | M | n/a | UI looked at in the browser |
+
+Step 2 is measured first. If the hook costs more than 1 % of decode, it moves into the FFN down
+gemv epilogue.
+
+## Lens math
+
+For neuron n of layer L: g = unit(W_down[:, n]) * output_norm_weight, logits = W_U g. Keep the top
+and bottom k tokens. One pass over W_U per layer: each vocab row is dotted with every neuron while
+the neuron block stays in L3.
+
+## Gates
+
+`scripts/check.sh` runs every test capped with
+`systemd-run --user --scope -p MemoryMax=4G -- timeout 300`. GPU work goes through `gpu-wait run`.

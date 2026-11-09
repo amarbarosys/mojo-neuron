@@ -1,0 +1,73 @@
+{
+ "n_pairs": 1921,
+ "n_test_statements": 768,
+ "surface_test_acc": {
+  "token_count": 0.5117,
+  "answer_position": 0.5117,
+  "template(object frame)": 0.5,
+  "object_frequency(statements containing it)": 0.5365,
+  "object_length": 0.5156,
+  "object_role_counts(train pairs, leave own out)": 0.5807,
+  "ALL surface features": 0.5755
+ },
+ "real_test_acc": 0.75,
+ "real_auroc": 0.8281,
+ "real_pairwise": 0.9245,
+ "controls": {
+  "global": {
+   "seeds": 30,
+   "acc_min_max": [
+    0.309,
+    0.682
+   ],
+   "max_abs_dev_from_0.5": 0.191,
+   "share_seeds_with_abs_dev_ge_real": 0.0,
+   "auroc_min_max": [
+    0.272,
+    0.728
+   ],
+   "pairwise_min_max": [
+    0.154,
+    0.852
+   ],
+   "sign_match_cos_vs_acc": 1.0
+  },
+  "within template": {
+   "seeds": 30,
+   "acc_min_max": [
+    0.318,
+    0.685
+   ],
+   "max_abs_dev_from_0.5": 0.185,
+   "share_seeds_with_abs_dev_ge_real": 0.0,
+   "auroc_min_max": [
+    0.266,
+    0.739
+   ],
+   "pairwise_min_max": [
+    0.151,
+    0.841
+   ],
+   "sign_match_cos_vs_acc": 1.0
+  },
+  "pair flip": {
+   "seeds": 30,
+   "acc_min_max": [
+    0.309,
+    0.69
+   ],
+   "max_abs_dev_from_0.5": 0.191,
+   "share_seeds_with_abs_dev_ge_real": 0.0,
+   "auroc_min_max": [
+    0.263,
+    0.733
+   ],
+   "pairwise_min_max": [
+    0.128,
+    0.831
+   ],
+   "sign_match_cos_vs_acc": 1.0
+  }
+ },
+ "cos_real_w_twin": 0.185
+}

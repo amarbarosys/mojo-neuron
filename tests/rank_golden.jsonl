@@ -1,0 +1,7 @@
+{"model":"t","layer":1,"neuron":"base","prompt":"p1","dose":0,"text":"The weather is nice today."}
+{"model":"t","layer":1,"neuron":7,"prompt":"p1","dose":0.5,"text":"snake snake snake snake snake snake alpha bravo charlie delta echo foxtrot nice nice nice nice nice"}
+{"model":"t","layer":1,"neuron":7,"prompt":"p1","dose":0,"text":"zzzz zzzz zzzz zzzz zzzz zzzz zzzz"}
+{"model":"t","layer":1,"neuron":9,"prompt":"p1","dose":0.5,"text":"golf hotel india juliet kilo lima mike nov oscar papa quebec romeo"}
+{"model":"t","layer":1,"neuron":"ctrl0","prompt":"p1","dose":0.5,"text":"kilo kilo lima mike nov oscar papa quebec romeo sierra tango uniform"}
+{"model":"t","layer":1,"neuron":"ctrl1","prompt":"p1","dose":0.5,"text":"golf hotel india juliet kilo lima mike nov oscar papa quebec romeo"}
+{"model":"t","layer":1,"neuron":"ctrl2","prompt":"p1","dose":0.5,"text":"victor whiskey xray yankee zulu alpha bravo charlie delta echo foxtrot golf"}

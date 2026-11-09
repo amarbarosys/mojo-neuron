@@ -1,0 +1,10 @@
+# live steered chat: map -> bucket -> list -> neuron, then press "generate" (engine sweep on the GPU)
+frame
+frame
+click 190 24
+click 660 180
+click 120 145
+wait 4
+click 480 428
+wait 2
+shot .work/shots/live.png

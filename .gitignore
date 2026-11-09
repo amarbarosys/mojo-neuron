@@ -1,0 +1,8 @@
+.venv
+.work/
+.pixi/
+.claude/
+__pycache__/
+.herd-inbox/
+__pycache__/
+*.pyc

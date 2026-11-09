@@ -1,0 +1,22 @@
+# persona dial: two neurons from two layers, sliders set by clicks, export the control vector
+frame
+frame
+click 190 24
+click 660 180
+click 120 145
+wait 4
+click 90 505
+click 949 24
+click 120 145
+wait 4
+click 90 505
+click 440 24
+wait 2
+click 330 116
+click 235 162
+wait 2
+shot .work/shots/dial.png
+click 807 375
+wait 3
+click 960 375
+wait 3

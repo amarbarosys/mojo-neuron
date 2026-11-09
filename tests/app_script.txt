@@ -1,0 +1,18 @@
+# e2e: map -> bucket -> list -> neuron -> fires -> recipe; every view shot (coordinates follow src/app.mojo layout)
+frame
+frame
+click 190 24
+shot .work/shots/map.png
+click 660 180
+shot .work/shots/list.png
+click 120 145
+wait 4
+shot .work/shots/neuron.png
+click 760 153
+wait 4
+shot .work/shots/fires.png
+click 60 397
+click 140 397
+click 220 397
+wait 2
+shot .work/shots/recipe.png
