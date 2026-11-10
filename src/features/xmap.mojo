@@ -5,6 +5,7 @@ fitted on B's rows permuted across positions. Neuron match: K sampled A neurons'
 columns of B (cosine, top-1), real map vs control map. Prints the numbers and ends with rlog.done (bar missed -> anomaly)."""
 from std.sys import argv, exit
 from std.math import sqrt
+from std.memory import bitcast
 from std.random import seed, random_float64
 from ggufx.model import Gguf
 from mneuron.ggio import kv_int, kv_str, tensor, load_rows, llama_ids
@@ -14,7 +15,7 @@ from mneuron.rlog import Rlog
 from rlens import ridge
 
 
-def fit(X: List[Float32], Y: List[Float32], n: Int, ha: Int, hb: Int) raises -> List[Float32]:
+def fit(X: List[Float32], Y: List[Float32], n: Int, ha: Int, hb: Int, lam: Float64) raises -> List[Float32]:
     """Ridge map hb x ha from X (n x ha) to Y (n x hb)."""
     var xt = List[Float32](length=ha * n, fill=0)
     var yt = List[Float32](length=hb * n, fill=0)
@@ -29,7 +30,17 @@ def fit(X: List[Float32], Y: List[Float32], n: Int, ha: Int, hb: Int) raises -> 
     for o in range(ha):
         for t in range(hb):
             Bo[o * hb + t] = B[t * ha + o]
-    return ridge(A, Bo, ha, 1e-3, hb)
+    return ridge(A, Bo, ha, lam, hb)
+
+
+def write_f32(path: String, v: List[Float32]) raises:
+    """Little-endian f32 file."""
+    var b = List[UInt8](capacity=len(v) * 4)
+    for x in v:
+        var u = bitcast[DType.uint32](x)
+        b.extend([UInt8(u & 255), UInt8((u >> 8) & 255), UInt8((u >> 16) & 255), UInt8(u >> 24)])
+    with open(path, "w") as f:
+        f.write_bytes(b)
 
 
 def r2(M: List[Float32], X: List[Float32], Y: List[Float32], n0: Int, n: Int, ha: Int, hb: Int) -> Float64:
@@ -91,7 +102,8 @@ def main() raises:
     var seg = 128
     var sample = 512
     var chunk = 64
-    var skip0 = False
+    var skip0 = True  # B3b: the attention-sink row is dropped by default (--keep0 restores B3)
+    var out = String()
     var av = argv()
     var i = 1
     while i < len(av):
@@ -108,6 +120,12 @@ def main() raises:
         elif t == "--skip0":
             skip0 = True
             i += 1
+        elif t == "--keep0":
+            skip0 = False
+            i += 1
+        elif t == "--out" and i + 1 < len(av):
+            out = String(av[i + 1])
+            i += 2
         elif t == "--chunk" and i + 1 < len(av):
             chunk = Int(String(av[i + 1]))
             i += 2
@@ -150,7 +168,7 @@ def main() raises:
         w0 = w1
     var n = nw * seg
     var nfit = (nw - max(1, nw // 10)) * seg
-    if skip0:  # post-hoc diagnostic (not the prereg number): drop position 0 of every window, the attention-sink row with a massive residual
+    if skip0:  # drop position 0 of every window, the attention-sink row with a massive residual (B3b default)
         var X2 = List[Float32]()
         var Y2 = List[Float32]()
         for p in range(n):
@@ -161,8 +179,45 @@ def main() raises:
         n = n - nw
         X = X2^
         Y = Y2^
-    var M = fit(X, Y, nfit, ha, hb)
+    # B3b: center both sides with the fit rows' means (an intercept); the held-out rows use the same means
+    var mux = List[Float64](length=ha, fill=0)
+    var muy = List[Float64](length=hb, fill=0)
+    for p in range(nfit):
+        for j in range(ha):
+            mux[j] += Float64(X[p * ha + j]) / Float64(nfit)
+        for j in range(hb):
+            muy[j] += Float64(Y[p * hb + j]) / Float64(nfit)
+    for p in range(n):
+        for j in range(ha):
+            X[p * ha + j] -= Float32(mux[j])
+        for j in range(hb):
+            Y[p * hb + j] -= Float32(muy[j])
+    # lambda on a validation slice (last 10 % of the fit rows), then refit on all fit rows
+    var nval = max(1, nfit // 10)
+    var lam = 1e-3
+    var best = -1e30
+    var lams = String()
+    for lv in [1e-4, 1e-3, 1e-2, 1e-1, 1.0]:
+        var vr = r2(fit(X, Y, nfit - nval, ha, hb, lv), X, Y, nfit - nval, nfit, ha, hb)
+        lams += String(lv) + ":" + String(vr) + " "
+        if vr > best:
+            best = vr
+            lam = lv
+    print("xmap: validation R2 per lambda:", lams, "-> lambda", lam)
+    var M = fit(X, Y, nfit, ha, hb, lam)
     var real = r2(M, X, Y, nfit, n, ha, hb)
+    if out.byte_length() > 0:  # map (hb x ha), means and lambda for F5
+        var mx = List[Float32]()
+        for v in mux:
+            mx.append(Float32(v))
+        var my = List[Float32]()
+        for v in muy:
+            my.append(Float32(v))
+        write_f32(out + ".map.f32", M)
+        write_f32(out + ".mux.f32", mx)
+        write_f32(out + ".muy.f32", my)
+        with open(out + ".json", "w") as f:
+            f.write("{\"ha\":" + String(ha) + ",\"hb\":" + String(hb) + ",\"la\":" + String(la) + ",\"lb\":" + String(lb) + ",\"lambda\":" + String(lam) + ",\"skip0\":" + ("true" if skip0 else "false") + "}\n")
     seed(11)
     var Ys = List[Float32](length=n * hb, fill=0)  # control: B's rows permuted across positions
     var perm = List[Int]()
@@ -176,7 +231,7 @@ def main() raises:
     for p in range(n):
         for j in range(hb):
             Ys[p * hb + j] = Y[perm[p] * hb + j]
-    var Mc = fit(X, Ys, nfit, ha, hb)
+    var Mc = fit(X, Ys, nfit, ha, hb, lam)
     var ctrl = r2(Mc, X, Ys, nfit, n, ha, hb)
     var ctrl_real = r2(Mc, X, Y, nfit, n, ha, hb)  # control map scored against the real held-out targets
     var ua = unit_down(ga, la, ha)
