@@ -27,6 +27,7 @@ def jload(p): return json.load(open(p))
 def exists(n): return os.path.exists(f"{W}/{n}")
 
 
+# gpu-wait --shared --vram: measured 9.89 GB (9.2 GiB) for engine-9b-g4 under rocm-smi, so 10 GiB; VRAM_GB overrides (boss rule 2026-11-10: correctness evals co-run).
 def engine(name, reqs, env=None, timeout=3000):
     """Run reqs (dicts with unique int ids) through one engine process in one gpu-wait job; returns ({id: {"toks","topk","slens","secs"}}, workdir)."""
     d = f"{W}/run-{name}"; os.makedirs(d, exist_ok=True)
@@ -41,7 +42,7 @@ def engine(name, reqs, env=None, timeout=3000):
     open(f"{d}/run.sh", "w").write("#!/usr/bin/env bash\n" + "".join(f"export {k}='{v}'\n" for k, v in e.items()) + f"cd '{d}'\nexec '{ENGINE}' < req.jsonl > out.jsonl 2> err.txt\n")
     os.chmod(f"{d}/run.sh", 0o755)
     t0 = time.time()
-    subprocess.run(["gpu-wait", "run", "--timeout", str(timeout), "--", f"{d}/run.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["gpu-wait", "run", "--shared", "--vram", os.environ.get("VRAM_GB", "10"), "--timeout", str(timeout), "--", f"{d}/run.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     out, done = {}, 0
     for l in open(f"{d}/out.jsonl"):
         if not l.startswith('{"id":'): continue
