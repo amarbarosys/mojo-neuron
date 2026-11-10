@@ -25,7 +25,7 @@ struct Pin(Movable):
 
 
 def load_pin(path: String, vocab: Int) raises -> Pin:
-    """Refuses a pin with no unit, more than 8, a prompt-less pin, an `expect` outside 0..vocab-1, or E0 <= 0 (prereg bar 3)."""
+    """Refuses a pin with no unit, more than 128 (F2b groups; F2 pinned at most 8), a prompt-less pin, an `expect` outside 0..vocab-1, or E0 <= 0 (prereg bar 3)."""
     var j = parse(read_text(path))
     var p = Pin()
     p.name = j.text("name")
@@ -37,8 +37,8 @@ def load_pin(path: String, vocab: Int) raises -> Pin:
     for q in j.get("prompts").items():
         p.prompts.append(q.text("text"))
         p.expect.append(q.get("expect").int())
-    if len(p.units) < 1 or len(p.units) > 8:
-        raise Error("circuit: " + path + " pins " + String(len(p.units)) + " units, want 1 to 8")
+    if len(p.units) < 1 or len(p.units) > 128:
+        raise Error("circuit: " + path + " pins " + String(len(p.units)) + " units, want 1 to 128")
     if len(p.prompts) < 1:
         raise Error("circuit: " + path + " has no prompt")
     for t in p.expect:
