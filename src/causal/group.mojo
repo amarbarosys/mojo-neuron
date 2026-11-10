@@ -65,8 +65,9 @@ def main() raises:
         labels.append(String(p[0]))
         var gs = String()
         var first = True
-        for n in p[1].split(","):
-            gs += ("" if first else ",") + ls + ":" + String(n) + ":" + String(p[2])
+        for n in p[1].split(","):  # a neuron may carry its own gain as N:g (else the line's gain applies)
+            var ng2 = n.split(":")
+            gs += ("" if first else ",") + ls + ":" + String(ng2[0]) + ":" + (String(ng2[1]) if len(ng2) == 2 else String(p[2]))
             first = False
         gains.append(gs)
     var ng = len(labels)
@@ -89,6 +90,8 @@ def main() raises:
     var dn = List[Float64](length=ng * np, fill=0)
     var dl = List[Float64](length=ng * np, fill=0)
     var seen = List[Bool](length=ng * np, fill=False)
+    var top = List[Int](length=ng * np, fill=-1)
+    var btop = List[Int](length=np, fill=-1)  # top-1 of the identity-gain base request of each prompt
     var ndone = 0
     for l in lines:
         if not l.startswith("{\"id\":"):
@@ -100,6 +103,14 @@ def main() raises:
             raise Error("engine request " + String(id + 1) + ": " + String(l))
         if l.find("\"done\"") >= 0:
             ndone += 1
+        elif l.find("\"tok\":") >= 0 and id >= np and id - np < ng * np and top[id - np] < 0:
+            var k = 0
+            _ = at(l, "\"tok\":", k)
+            top[id - np] = Int(num(l.as_bytes(), k))
+        elif l.find("\"tok\":") >= 0 and id >= 0 and id < np and btop[id] < 0:
+            var k = 0
+            _ = at(l, "\"tok\":", k)
+            btop[id] = Int(num(l.as_bytes(), k))
         if l.find("\"slens\"") >= 0:
             var u = id - np
             if u < 0 or u >= ng * np or seen[u]:
@@ -118,14 +129,14 @@ def main() raises:
             seen[u] = True
     if ndone != len(reqs):
         raise Error("response incomplete: " + String(ndone) + " done lines for " + String(len(reqs)) + " requests")
-    var tsv = String("label\tprompt\tkl\tdnll\tdld\n")
+    var tsv = String("label\tprompt\tkl\tdnll\tdld\ttop1\tbase_top1\ttarget\n")
     var vals = List[Float64]()
     for gi in range(ng):
         for pi in range(np):
             var u = gi * np + pi
             if not seen[u]:
                 raise Error("group " + labels[gi] + " prompt " + String(pi) + " has no slens line")
-            tsv += labels[gi] + "\t" + String(pi) + "\t" + String(kl[u]) + "\t" + String(dn[u]) + "\t" + String(dl[u]) + "\n"
+            tsv += labels[gi] + "\t" + String(pi) + "\t" + String(kl[u]) + "\t" + String(dn[u]) + "\t" + String(dl[u]) + "\t" + String(top[u]) + "\t" + String(btop[pi]) + "\t" + String(tgt[pi]) + "\n"
             vals.append(kl[u])
             vals.append(dl[u])
     var path = odir + "/L" + ls + ".group.tsv"
