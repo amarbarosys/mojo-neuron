@@ -371,7 +371,7 @@ if STAGE == "facts-rank" and not exists("facts-rank.json"):  # docs/prereg-facts
             kw = {"implants": 0} if s_ == 0 else imp_kw(L, kk, s_)
             rs.append({"id": ids.new(kind="nll", i=i, s=s_), "prompt": enc(f["exact"]), "n": 1, **kw, "slens_ctx": i, "slens_k": 1, "slens_tgt": gold[i], "slens_flags": 3})
             rs.append({"id": ids.new(kind="top", i=i, s=s_), "prompt": enc(f["exact"]), "n": 1, "logits_topk": 20, **kw})
-    out, _ = engine("facts-rank", rs, timeout=900)
+    out, _ = engine("facts-rank", rs, {"BARO_IMPLANTS": info["file"]}, timeout=900)
     rows = []
     for rid, m in ids.meta.items():
         if m["kind"] != "nll": continue
@@ -386,7 +386,7 @@ if STAGE == "facts-rank" and not exists("facts-rank.json"):  # docs/prereg-facts
         lines.append(f"| {s_:g} | {n20} | {med:.2f} | {float(np.median([r['gap'] for r in rr])):.2f} |")
     r1 = {s_: stats[s_][0] - stats[0.0][0] >= 3 for s_ in (8.0, 32.0)}; r2 = {s_: stats[0.0][1] - stats[s_][1] >= 2.0 for s_ in (8.0, 32.0)}
     lines += ["", f"sanity: max |dnll| at scale 0 = {sane:.2e} (must be 0)", f"R1 (top-20 count up by 3 or more): scale 8 {r1[8.0]}, scale 32 {r1[32.0]}", f"R2 (median NLL down by 2.0 nats or more): scale 8 {r2[8.0]}, scale 32 {r2[32.0]}",
-              "RESULT: " + ("VOID, scale-0 dnll is not 0" if sane > 1e-6 else "MOVES (grid too small), next step to the boss" if any(r1.values()) or any(r2.values()) else "NULL, facts line closed")]
+              "RESULT: " + ("VOID, scale-0 dnll is not 0" if sane > 1e-6 else "VOID, implants inert: no fact changed its gold NLL between scale 0 and 32" if not any(abs(r["nll"] - z["nll"]) > 1e-6 for r in rows if r["scale"] == 32.0 for z in base0 if z["i"] == r["i"]) else "MOVES (grid too small), next step to the boss" if any(r1.values()) or any(r2.values()) else "NULL, facts line closed")]
     open(f"{W}/facts-rank.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
 
 if STAGE == "facts-verdict":

@@ -132,3 +132,4 @@
 - Two lanes each registered an nx call named "scan"; the merge kept both and the second was dead. -> After merging lanes that add nx calls, grep the dispatch for duplicate names; tests call each new name through nx.
 - 2026-11-09 a gpu-wait job runs with a bare PATH: `bench/preflight.sh` failed at `cargo: command not found` after 29 builds -> pass `--env PATH=$HOME/.cargo/bin:$PATH` when a job calls cargo, and read the log tail before waiting on a rerun.
 - 2026-11-10 harness engine jobs ran exclusive for 3 chains -> every eval submit uses gpu-wait --shared --vram <measured> (tools/implants-harness.py engine(), VRAM_GB env).
+- 2026-11-10 facts-rank first run omitted BARO_IMPLANTS, scales identical, I called it NULL -> a sanity must prove the treatment acted (scale 32 differs from 0) before any null; stage now has that VOID check.

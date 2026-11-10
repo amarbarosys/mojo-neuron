@@ -6,6 +6,8 @@ Setup. First 20 facts of the unknown list (the same order as `facts-train.json`)
 - `nll`: absolute NLL of the gold first token, from the steer lens (`slens_tgt`, one-context series). Sanity: at scale 0 `dnll` = 0.
 - `top20`: whether the gold first token is in the engine's top-20 list (`logits_topk`), its rank there, and the gap logit(top1) minus logit(gold) when present (else minus the 20th logit, a lower bound).
 
+Added after a void first run (BARO_IMPLANTS was not set, implants inert, every scale identical; receipt moved to .work/impl-m3/old/): the run is VOID unless at least one fact changes its gold NLL between scale 0 and 32. Bars unchanged.
+
 Close as NULL (facts line ends, no further implants-for-facts work) unless at least one of these holds at scale 8 or 32:
 - R1: the number of the 20 facts with the gold first token in the top 20 rises by 3 or more over scale 0;
 - R2: the median gold NLL falls by 2.0 nats or more against scale 0.
