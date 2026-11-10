@@ -66,6 +66,7 @@ class Ids:
     """Unique request ids with a side table of what each one is."""
     def __init__(self): self.n = 0; self.meta = {}
     def new(self, **m): self.n += 1; self.meta[self.n] = m; return self.n
+    def find(self, **m): return next(i for i, v in self.meta.items() if all(v.get(k) == x for k, x in m.items()))
 
 N_ANS = int(os.environ.get("N_ANS", 10))  # answer tokens generated (three-digit products have up to 6 digits)
 def req(i, text_or_ids, n=None, **kw): return {"id": i, "prompt": enc(text_or_ids) if isinstance(text_or_ids, str) else text_or_ids, "n": N_ANS if n is None else n, **kw}
@@ -361,6 +362,33 @@ if STAGE == "facts-eval":
                                     "unrel_off": float(np.mean([ok_of(out, rid, unrel[m["i"]][1]) for rid, m in by("unrel_off")])), "ppl_change": math.exp(out[last[(L, info["rows_cum"][k100], s)]]["slens"]["dnll"]) - 1}
         json.dump(res, open(f"{W}/facts-results-{name}.json", "w"), indent=1); print(json.dumps(res, indent=1))
 
+if STAGE == "facts-rank" and not exists("facts-rank.json"):  # docs/prereg-facts-rank.md: gold first-token NLL and top-20 rank at scale 0/8/32 on 20 facts
+    fs = facts(); unk = jload(f"{W}/facts-known.json")["unknown"]; info = jload(f"{W}/facts-train.json"); sub = [fs[i] for i in unk][:20]; L = info["layer"]; kk = info["rows_cum"][100]
+    RS = [0.0, 8.0, 32.0]; ids = Ids(); rs = []; gold = [enc(f["gold"])[0] for f in sub]
+    for i, f in enumerate(sub): rs.append({"id": ids.new(kind="base", i=i), "prompt": enc(f["exact"]), "n": 1, "implants": 0, "slens_ctx": i, "slens_k": 0})
+    for s_ in RS:
+        for i, f in enumerate(sub):
+            kw = {"implants": 0} if s_ == 0 else imp_kw(L, kk, s_)
+            rs.append({"id": ids.new(kind="nll", i=i, s=s_), "prompt": enc(f["exact"]), "n": 1, **kw, "slens_ctx": i, "slens_k": 1, "slens_tgt": gold[i], "slens_flags": 3})
+            rs.append({"id": ids.new(kind="top", i=i, s=s_), "prompt": enc(f["exact"]), "n": 1, "logits_topk": 20, **kw})
+    out, _ = engine("facts-rank", rs, timeout=900)
+    rows = []
+    for rid, m in ids.meta.items():
+        if m["kind"] != "nll": continue
+        o = out[rid]["slens"]; tk = out[ids.find(kind="top", i=m["i"], s=m["s"])]["topk"]; srt = sorted(tk, key=tk.get, reverse=True); g = gold[m["i"]]
+        rows.append({"i": m["i"], "scale": m["s"], "nll": o["nll"], "dnll": o["dnll"], "rank": srt.index(g) + 1 if g in tk else None, "gap": tk[srt[0]] - tk[g] if g in tk else tk[srt[0]] - tk[srt[-1]], "gap_lower_bound": g not in tk})
+    json.dump(rows, open(f"{W}/facts-rank.json", "w"), indent=1)
+    base0 = [r for r in rows if r["scale"] == 0.0]; sane = max(abs(r["dnll"]) for r in base0)
+    lines = ["## Facts rank falsifier (prereg docs/prereg-facts-rank.md, 20 facts, layer 16, k = 100)", "", "| scale | gold in top 20 (of 20) | median gold NLL | median gap (lower bound when absent) |", "|---|---|---|---|"]
+    stats = {}
+    for s_ in RS:
+        rr = [r for r in rows if r["scale"] == s_]; n20 = sum(1 for r in rr if r["rank"] is not None); med = float(np.median([r["nll"] for r in rr])); stats[s_] = (n20, med)
+        lines.append(f"| {s_:g} | {n20} | {med:.2f} | {float(np.median([r['gap'] for r in rr])):.2f} |")
+    r1 = {s_: stats[s_][0] - stats[0.0][0] >= 3 for s_ in (8.0, 32.0)}; r2 = {s_: stats[0.0][1] - stats[s_][1] >= 2.0 for s_ in (8.0, 32.0)}
+    lines += ["", f"sanity: max |dnll| at scale 0 = {sane:.2e} (must be 0)", f"R1 (top-20 count up by 3 or more): scale 8 {r1[8.0]}, scale 32 {r1[32.0]}", f"R2 (median NLL down by 2.0 nats or more): scale 8 {r2[8.0]}, scale 32 {r2[32.0]}",
+              "RESULT: " + ("VOID, scale-0 dnll is not 0" if sane > 1e-6 else "MOVES (grid too small), next step to the boss" if any(r1.values()) or any(r2.values()) else "NULL, facts line closed")]
+    open(f"{W}/facts-rank.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
+
 if STAGE == "facts-verdict":
     R, C = jload(f"{W}/facts-results-real.json"), jload(f"{W}/facts-results-ctl.json"); info = jload(f"{W}/facts-train.json"); k100 = str(R["k100"]); s = str(R["per_k"][k100]["scale"]); r, c = R["scales"][s], C["scales"][s]
     ex, ex_c = R["per_k"][k100]["exact"], C["per_k"][k100]["exact_by_scale"][s]; secs_pf = (info["cap_secs"] + info["build_secs"]) / info["n"]
@@ -369,4 +397,4 @@ if STAGE == "facts-verdict":
     lines += ["", f"M-A capacity at k={k100} (scale {s}): exact {ex:.3f} (bar >= 0.90 -> {'PASS' if ex >= 0.9 else 'MISSED'}), paraphrase mean {r['para']:.3f} (bar >= 0.50 -> {'PASS' if r['para'] >= 0.5 else 'MISSED'}); k=1000 paraphrase NOT RUN (reported without a bar in the prereg, skipped for GPU time)",
               f"M-B interference at k={k100}: unrelated accuracy drop {du:+.3f} (bar <= 0.01), ppl change {r['ppl_change']:+.4f} (bar <= 0.01), control drop {duc:+.3f} / ppl {c['ppl_change']:+.4f} -> {'PASS' if du <= 0.01 and r['ppl_change'] <= 0.01 and abs(duc) <= abs(du) + 0.01 else 'MISSED'}",
               f"M-C cost: {secs_pf:.3f} s per fact (engine capture {info['cap_secs']:.1f} s + builder {info['build_secs']:.1f} s over {info['n']} facts) -> {'PASS' if secs_pf <= 5 else 'MISSED'} against 5 s; LoRA step time: UNMEASURED unless the report cites a train log", f"control exact recall at the same k and scale: {ex_c:.3f}"]
-    open(f"{W}/verdict-facts.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
+    open(f"{W}/verdict-facts.md", "w").write("\n".join(lines) + "\n" + (("\n" + open(f"{W}/facts-rank.md").read()) if exists("facts-rank.md") else "")); print("\n".join(lines))
