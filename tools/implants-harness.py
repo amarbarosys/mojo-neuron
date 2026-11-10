@@ -386,8 +386,24 @@ if STAGE == "facts-rank" and not exists("facts-rank.json"):  # docs/prereg-facts
         lines.append(f"| {s_:g} | {n20} | {med:.2f} | {float(np.median([r['gap'] for r in rr])):.2f} |")
     r1 = {s_: stats[s_][0] - stats[0.0][0] >= 3 for s_ in (8.0, 32.0)}; r2 = {s_: stats[0.0][1] - stats[s_][1] >= 2.0 for s_ in (8.0, 32.0)}
     lines += ["", f"sanity: max |dnll| at scale 0 = {sane:.2e} (must be 0)", f"R1 (top-20 count up by 3 or more): scale 8 {r1[8.0]}, scale 32 {r1[32.0]}", f"R2 (median NLL down by 2.0 nats or more): scale 8 {r2[8.0]}, scale 32 {r2[32.0]}",
-              "RESULT: " + ("VOID, scale-0 dnll is not 0" if sane > 1e-6 else "VOID, implants inert: no fact changed its gold NLL between scale 0 and 32" if not any(abs(r["nll"] - z["nll"]) > 1e-6 for r in rows if r["scale"] == 32.0 for z in base0 if z["i"] == r["i"]) else "MOVES (grid too small), next step to the boss" if any(r1.values()) or any(r2.values()) else "NULL, facts line closed")]
+              "RESULT: " + ("VOID, scale-0 dnll is not 0" if sane > 1e-6 else "VOID, implants inert: no fact changed its gold NLL between scale 0 and 32" if not any(abs(r["nll"] - z["nll"]) > 1e-6 for r in rows if r["scale"] == 32.0 for z in base0 if z["i"] == r["i"]) else "MOVES, next step to the boss" if any(r1.values()) or any(r2.values()) else "NULL, facts line closed")]
     open(f"{W}/facts-rank.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
+
+if STAGE == "facts-rank2" and not exists("facts-rank2.json"):  # docs/prereg-facts-rank2.md: gold first token rank 1 / top 5 counts at scale 8..24
+    fs = facts(); unk = jload(f"{W}/facts-known.json")["unknown"]; info = jload(f"{W}/facts-train.json"); sub = [fs[i] for i in unk][:20]; L = info["layer"]; kk = info["rows_cum"][100]
+    RS = [0.0, 8.0, 12.0, 16.0, 20.0, 24.0]; ids = Ids(); rs = []; gold = [enc(f["gold"])[0] for f in sub]
+    for s_ in RS:
+        for i, f in enumerate(sub): rs.append({"id": ids.new(kind="top", i=i, s=s_), "prompt": enc(f["exact"]), "n": 1, "logits_topk": 20, **({"implants": 0} if s_ == 0 else imp_kw(L, kk, s_))})
+    out, _ = engine("facts-rank2", rs, {"BARO_IMPLANTS": info["file"]}, timeout=900)
+    res = {}; top1 = {}
+    for rid, m in ids.meta.items():
+        tk = out[rid]["topk"]; srt = sorted(tk, key=tk.get, reverse=True); g = gold[m["i"]]; top1[(m["s"], m["i"])] = srt[0]
+        r = res.setdefault(m["s"], {"rank1": 0, "top5": 0, "top20": 0}); r["rank1"] += srt[0] == g; r["top5"] += g in srt[:5]; r["top20"] += g in tk
+    inert = all(top1[(24.0, i)] == top1[(0.0, i)] for i in range(20)); best = max(r["rank1"] for r in res.values())
+    lines = ["## Facts rank 2 (prereg docs/prereg-facts-rank2.md, 20 facts, layer 16, k = 100)", "", "| scale | gold rank 1 (of 20) | in top 5 | in top 20 |", "|---|---|---|---|"]
+    lines += [f"| {s_:g} | {res[s_]['rank1']} | {res[s_]['top5']} | {res[s_]['top20']} |" for s_ in RS]
+    lines += ["", "RK-A (rank 1 for 10 or more of 20 at some scale in 8..24): " + ("VOID, implants inert (scale-24 top-1 equals scale-0 top-1 for all 20)" if inert else f"{'PASS' if best >= 10 else 'MISSED'} (best {best}/20)"), "RK-B top-5 counts are in the table, no bar."]
+    json.dump({"res": {str(k): v for k, v in res.items()}, "inert": inert}, open(f"{W}/facts-rank2.json", "w"), indent=1); open(f"{W}/facts-rank2.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
 
 if STAGE == "facts-verdict":
     R, C = jload(f"{W}/facts-results-real.json"), jload(f"{W}/facts-results-ctl.json"); info = jload(f"{W}/facts-train.json"); k100 = str(R["k100"]); s = str(R["per_k"][k100]["scale"]); r, c = R["scales"][s], C["scales"][s]
@@ -397,4 +413,4 @@ if STAGE == "facts-verdict":
     lines += ["", f"M-A capacity at k={k100} (scale {s}): exact {ex:.3f} (bar >= 0.90 -> {'PASS' if ex >= 0.9 else 'MISSED'}), paraphrase mean {r['para']:.3f} (bar >= 0.50 -> {'PASS' if r['para'] >= 0.5 else 'MISSED'}); k=1000 paraphrase NOT RUN (reported without a bar in the prereg, skipped for GPU time)",
               f"M-B interference at k={k100}: unrelated accuracy drop {du:+.3f} (bar <= 0.01), ppl change {r['ppl_change']:+.4f} (bar <= 0.01), control drop {duc:+.3f} / ppl {c['ppl_change']:+.4f} -> {'PASS' if du <= 0.01 and r['ppl_change'] <= 0.01 and abs(duc) <= abs(du) + 0.01 else 'MISSED'}",
               f"M-C cost: {secs_pf:.3f} s per fact (engine capture {info['cap_secs']:.1f} s + builder {info['build_secs']:.1f} s over {info['n']} facts) -> {'PASS' if secs_pf <= 5 else 'MISSED'} against 5 s; LoRA step time: UNMEASURED unless the report cites a train log", f"control exact recall at the same k and scale: {ex_c:.3f}"]
-    open(f"{W}/verdict-facts.md", "w").write("\n".join(lines) + "\n" + (("\n" + open(f"{W}/facts-rank.md").read()) if exists("facts-rank.md") else "")); print("\n".join(lines))
+    open(f"{W}/verdict-facts.md", "w").write("\n".join(lines) + "\n" + "".join("\n" + open(f"{W}/{n}").read() for n in ("facts-rank.md", "facts-rank2.md") if exists(n))); print("\n".join(lines))
