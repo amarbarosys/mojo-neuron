@@ -13,7 +13,7 @@ from tokenizers import Tokenizer
 W, STAGE = os.path.abspath(sys.argv[1]), sys.argv[2]
 HOME = os.path.expanduser("~"); BARO = f"{HOME}/Projects/mojo/mojo-baro-lanes/neuron2b"
 ENGINE = os.environ.get("ENGINE", f"{BARO}/.work/engine-9b-g"); PACK = os.environ.get("PACK", f"{HOME}/Projects/mojo/mojo-baro/.work/e11b-qwythos-pack")
-GGUF = os.environ.get("GGUF", f"{HOME}/Models/qwythos-9b-claude-mythos-5-1m-mtp-q4_k_m/Qwythos-9B-Claude-Mythos-5-1M-MTP-Q4_K_M.gguf")
+GGUF = os.environ.get("GGUF", f"{HOME}/Models/qwythos-9b-claude-mythos-5-1m-mtp-bf16/Qwythos-9B-Claude-Mythos-5-1M-MTP-Q4_0-pure.gguf")  # the e11b pack source_gguf
 TOK = Tokenizer.from_file(os.environ.get("TOKENIZER", f"{HOME}/Models/qwythos-9b-claude-mythos-5-1m-mtp-bf16/hf/tokenizer.json"))
 BUILDER = os.environ.get("BUILDER", os.path.abspath(".work/implants")); DRY = os.environ.get("DRY") == "1"
 LAYERS = [int(x) for x in os.environ.get("LAYERS", "12,16,20,24").split(",")]; KS = [int(x) for x in os.environ.get("KS", "1,10,100,1000").split(",")]
