@@ -3,7 +3,7 @@
 # renders to a WAV for listening (.work/scan-real/real.wav). Needs the neuron2 engine build (A1); one short GPU job through gpu-wait.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-BARO=${BARO:-$HOME/Projects/mojo/mojo-baro-lanes/neuron2}; ENGINE=${ENGINE:-$BARO/.work/engine-9b}; PACK=${PACK:-$HOME/Projects/mojo/mojo-baro/.work/e11b-qwythos-pack}
+BARO=${BARO:-$HOME/Projects/mojo/mojo-baro}; ENGINE=${ENGINE:-$BARO/.work/engine-9b}; PACK=${PACK:-$HOME/Projects/mojo/mojo-baro/.work/e11b-qwythos-pack}
 M=${MOJO:-$HOME/Projects/mojo/mojo-gguf/.venv/bin/mojo}; GG=${GGUF_SRC:-$HOME/Projects/mojo/mojo-gguf/src}; J=${JSON_SRC:-$HOME/Projects/mojo/mojo-json/src}; LG=${LOG_SRC:-$HOME/Projects/mojo/mojo-log/src}
 O=$PWD/.work/scan-real; rm -rf "$O"; mkdir -p "$O/cap"; fail() { echo "FAIL scan-real: $1"; exit 1; }
 [ -x "$ENGINE" ] || fail "no engine at $ENGINE"

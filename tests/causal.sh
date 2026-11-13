@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."; mkdir -p .work/causal-test
 M=${MOJO:-$HOME/Projects/mojo/mojo-gguf/.venv/bin/mojo}; GG=${GGUF_SRC:-$HOME/Projects/mojo/mojo-gguf/src}; LG=${LOG_SRC:-$HOME/Projects/mojo/mojo-log/src}
-BARO=${BARO:-$HOME/Projects/mojo/mojo-baro-lanes/neuron2}; SP=${SUBPROC_SRC:-$HOME/Projects/mojo/mojo-subprocess/src}
+BARO=${BARO:-$HOME/Projects/mojo/mojo-baro}; SP=${SUBPROC_SRC:-$HOME/Projects/mojo/mojo-subprocess/src}
 Q=${QWEN:-$HOME/Models/qwen2.5-0.5b-instruct-import/qwen2.5-0.5b-instruct-q4_K_M.gguf}
 T=.work/causal-test; I="-I src -I $GG -I $BARO -I $BARO/serve -I $SP -I $LG"
 for t in scan surgery; do timeout 300 "$M" build src/causal/$t.mojo $I -o $T/$t 2> $T/$t.log || { grep -A5 -m3 error $T/$t.log | cut -c1-240; echo "FAIL build: $t"; exit 1; }; done
