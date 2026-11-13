@@ -407,11 +407,21 @@ if STAGE == "facts-rank2" and not exists("facts-rank2.json"):  # docs/prereg-fac
     lines += ["", "RK-A (rank 1 for 10 or more of 20 at some scale in 8..24): " + ("VOID, implants inert (scale-24 top-1 equals scale-0 top-1 for all 20)" if inert else f"{'PASS' if best >= 10 else 'MISSED'} (best {best}/20)"), "RK-B top-5 counts are in the table, no bar."]
     json.dump({"res": {str(k): v for k, v in res.items()}, "inert": inert}, open(f"{W}/facts-rank2.json", "w"), indent=1); open(f"{W}/facts-rank2.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
 
-if STAGE == "facts-late" and not exists("facts-late.json"):  # docs/prereg-facts-late.md: same builder, last layers, k = 20, real vs control
+VR = os.environ.get("VALUE") == "right"; SX = "-right" if VR else ""
+def unembed_rows(ids):
+    from gguf import GGUFReader, dequantize
+    t = next(t for t in GGUFReader(GGUF).tensors if t.name == "output.weight"); return np.stack([dequantize(t.data[i:i + 1], t.tensor_type).reshape(-1) for i in ids]).astype(np.float32)
+
+if STAGE == "facts-late" and not exists(f"facts-late{SX}.json"):  # docs/prereg-facts-late.md: same builder, last layers, k = 20, real vs control
     fs = facts(); unk = jload(f"{W}/facts-known.json")["unknown"]; sub = [fs[i] for i in unk][:20]; LL = [28, 30, 31]; SC = [0.5, 1.0, 2.0, 4.0, 8.0]
     gold = [enc(f["gold"])[0] for f in sub]; triv = [enc(q) for q, _ in TRIVIA]
     items, cd, _ = capture_ids("late", [enc(f["exact"]) for f in sub], gold, [None] * 20, LL)
-    real, _ = build_full(items, cd, LL, 20, "late"); H, sets = read_sets(real); ctl = f"{W}/ctl-late.bin"; write_sets(ctl, H, control_sets(sets))
+    real, _ = build_full(items, cd, LL, 20, "late"); H, sets = read_sets(real)
+    if VR:  # docs/prereg-facts-late-right.md: value = U[right] at the original row norm
+        U = unembed_rows([it["right"] for it in items])
+        for st in sets: st["vals"] = U * (np.linalg.norm(st["vals"], axis=1, keepdims=True) / np.linalg.norm(U, axis=1, keepdims=True))
+        real = f"{W}/imp-late-right.bin"; write_sets(real, H, sets)
+    ctl = f"{W}/ctl-late{SX}.bin"; write_sets(ctl, H, control_sets(sets))
     res = {}
     for arm, path in (("real", real), ("ctl", ctl)):
         ids = Ids(); rs = []
@@ -419,7 +429,7 @@ if STAGE == "facts-late" and not exists("facts-late.json"):  # docs/prereg-facts
             rs.append({"id": ids.new(p=p_i, L=0, s=0.0), "prompt": p, "n": 1, "logits_topk": 20, "implants": 0})
             for L in LL:
                 for s_ in SC: rs.append({"id": ids.new(p=p_i, L=L, s=s_), "prompt": p, "n": 1, "logits_topk": 20, **imp_kw(L, 20, s_)})
-        out, _ = engine(f"late-{arm}", rs, {"BARO_IMPLANTS": path}, timeout=900)
+        out, _ = engine(f"late{SX}-{arm}", rs, {"BARO_IMPLANTS": path}, timeout=900)
         top = {(m["p"], m["L"], m["s"]): max(out[rid]["topk"], key=out[rid]["topk"].get) for rid, m in ids.meta.items()}
         res[arm] = {f"{L}/{s_:g}": {"rank1": sum(top[(i, L, s_)] == gold[i] for i in range(20)), "moved": sum(top[(i, L, s_)] != top[(i, 0, 0.0)] for i in range(20)),
                                     "triv_kept": sum(top[(20 + j, L, s_)] == top[(20 + j, 0, 0.0)] for j in range(len(triv)))} for L in LL for s_ in SC}
@@ -432,7 +442,7 @@ if STAGE == "facts-late" and not exists("facts-late.json"):  # docs/prereg-facts
     a = R[best]["rank1"] >= 16; b = C[best]["rank1"] <= 2
     lines += ["", "VOID, implants inert" if inert else f"LL-A (rank 1 >= 16/20): {'PASS' if a else 'MISSED'} (best {R[best]['rank1']}/20 at {best})",
               f"LL-B (control rank 1 <= 2 at {best}): {'PASS' if b else 'MISSED'} ({C[best]['rank1']}/20)", f"LL-C trivia kept at {best}: {R[best]['triv_kept']}/10"]
-    json.dump(res, open(f"{W}/facts-late.json", "w"), indent=1); open(f"{W}/facts-late.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
+    json.dump(res, open(f"{W}/facts-late{SX}.json", "w"), indent=1); open(f"{W}/facts-late{SX}.md", "w").write("\n".join(lines) + "\n"); print("\n".join(lines))
 
 if STAGE == "facts-verdict":
     R, C = jload(f"{W}/facts-results-real.json"), jload(f"{W}/facts-results-ctl.json"); info = jload(f"{W}/facts-train.json"); k100 = str(R["k100"]); s = str(R["per_k"][k100]["scale"]); r, c = R["scales"][s], C["scales"][s]
