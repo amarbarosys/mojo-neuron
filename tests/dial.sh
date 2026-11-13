@@ -3,7 +3,7 @@
 # app (script: two neurons, slider clicks, export) -> cvec.gguf == f32 -> llama.cpp --control-vector -> delta logits llama.cpp vs engine -> negated mutant.
 set -euo pipefail
 cd "$(dirname "$0")/.."; mkdir -p .work/shots .work/dial
-HOMEP=$HOME; E=${ENGINE:-$HOME/Projects/mojo/mojo-neuron-lanes/engine}; BARO=${BARO:-$HOME/Projects/mojo/mojo-baro-lanes/ablate}
+HOMEP=$HOME; E=${ENGINE:-$HOME/Projects/mojo/mojo-neuron}; BARO=${BARO:-$HOME/Projects/mojo/mojo-baro}
 M=${MOJO:-$HOME/Projects/mojo/mojo-gguf/.venv/bin/mojo}; GG=${GGUF_SRC:-$HOME/Projects/mojo/mojo-gguf/src}; J=${JSON_SRC:-$HOME/Projects/mojo/mojo-json/src}; LG=${LOG_SRC:-$HOME/Projects/mojo/mojo-log/src}
 Q=${QWEN:-$HOME/Models/qwen2.5-0.5b-instruct-import/qwen2.5-0.5b-instruct-q4_K_M.gguf}; MOD=qwen2.5-0.5b-instruct-q4_k_m
 GGBF=${GGUF:-$HOME/Models/qwen2.5-0.5b-instruct-import/qwen2.5-0.5b-instruct-bf16.gguf}

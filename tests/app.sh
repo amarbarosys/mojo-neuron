@@ -30,7 +30,7 @@ ocr=$(img-read .work/shots/fires.png 2>&1)  # "romotes": the glass theme makes t
 for w in "connections" "fires on your text" "romotes" "steered chat" "snake" "BASELINEWORD" "NEGATIVEWORD" "POSITIVEWORD"; do echo "$ocr" | grep -qi "$w" || { echo "FAIL app: OCR of the neuron view lacks '$w'"; exit 1; }; done
 ocr=$(img-read .work/shots/map.png 2>&1); echo "$ocr" | grep -qi "map" || { echo "FAIL app: OCR of the map view"; exit 1; }
 # live generate: the button runs the engine's sweep for the selected neuron; the three columns must change and show the prompt
-E=${ENGINE:-$HOME/Projects/mojo/mojo-neuron-lanes/engine}; BARO=${BARO:-$HOME/Projects/mojo/mojo-baro-lanes/ablate}
+E=${ENGINE:-$HOME/Projects/mojo/mojo-neuron}; BARO=${BARO:-$HOME/Projects/mojo/mojo-baro}
 for f in "$E/.work/sweep" "$BARO/.work/steer/spark-q05" "$E/.work/steer/q05/rho.f32"; do [ -e "$f" ] || { echo "FAIL app: $f missing (live stage needs the engine lane build)"; exit 1; }; done
 printf '{"sweep":"%s","gguf":"%s","spark":"%s","pack":"%s","baro":"%s","rho":"%s"}\n' "$E/.work/sweep" "$HOME/Models/qwen2.5-0.5b-instruct-import/qwen2.5-0.5b-instruct-bf16.gguf" \
   "$BARO/.work/steer/spark-q05" "$BARO/.work/abl/q/pack" "$BARO" "$E/.work/steer/q05/rho.f32" > "$MNEURON_DIR/$MOD/live.json"

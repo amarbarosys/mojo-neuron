@@ -139,7 +139,7 @@ struct Req(Copyable, Movable):
 
 
 def run_spark(reqs: List[String], a: List[String], odir: String, extra: String = "") raises -> List[String]:
-    var baro = opt(a, "baro", String("$HOME/Projects/mojo/mojo-baro-lanes/ablate"))
+    var baro = opt(a, "baro", String("$HOME/Projects/mojo/mojo-baro"))
     var spark = opt(a, "spark", baro + "/.work/steer/spark-q05")
     var pack = opt(a, "pack", baro + "/.work/abl/q/pack")
     var runner = opt(a, "runner", String("gpu-wait run --timeout 900 --"))

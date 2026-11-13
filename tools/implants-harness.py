@@ -11,7 +11,7 @@ import numpy as np
 from tokenizers import Tokenizer
 
 W, STAGE = os.path.abspath(sys.argv[1]), sys.argv[2]
-HOME = os.path.expanduser("~"); BARO = f"{HOME}/Projects/mojo/mojo-baro-lanes/neuron2b"
+HOME = os.path.expanduser("~"); BARO = f"{HOME}/Projects/mojo/mojo-baro"
 ENGINE = os.environ.get("ENGINE", f"{BARO}/.work/engine-9b-g"); PACK = os.environ.get("PACK", f"{HOME}/Projects/mojo/mojo-baro/.work/e11b-qwythos-pack")
 GGUF = os.environ.get("GGUF", f"{HOME}/Models/qwythos-9b-claude-mythos-5-1m-mtp-bf16/Qwythos-9B-Claude-Mythos-5-1M-MTP-Q4_0-pure.gguf")  # the e11b pack source_gguf
 TOK = Tokenizer.from_file(os.environ.get("TOKENIZER", f"{HOME}/Models/qwythos-9b-claude-mythos-5-1m-mtp-bf16/hf/tokenizer.json"))

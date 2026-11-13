@@ -4,10 +4,10 @@
 # Also: a missing live.json and a broken sweep path are errors, not empty answers; an MCP client cannot start a GPU job.
 set -euo pipefail
 cd "$(dirname "$0")/.."; mkdir -p .work
-E=${ENGINE:-$HOME/Projects/mojo/mojo-neuron-lanes/engine}; BARO=${BARO:-$HOME/Projects/mojo/mojo-baro-lanes/ablate}
+E=${ENGINE:-$HOME/Projects/mojo/mojo-neuron}; BARO=${BARO:-$HOME/Projects/mojo/mojo-baro}
 GG=${GGUF:-$HOME/Models/qwen2.5-0.5b-instruct-import/qwen2.5-0.5b-instruct-bf16.gguf}
 Q=${QWEN:-$HOME/Models/qwen2.5-0.5b-instruct-import/qwen2.5-0.5b-instruct-q4_K_M.gguf}; MOD=qwen2.5-0.5b-instruct-q4_k_m
-for f in "$E/.work/sweep" "$BARO/.work/steer/spark-q05" "$E/.work/steer/q05/rho.f32" "$GG"; do [ -e "$f" ] || { echo "FAIL live: $f missing (build the engine lane first)"; exit 1; }; done
+for f in "$E/.work/sweep" "$BARO/.work/steer/spark-q05" "$E/.work/steer/q05/rho.f32" "$GG"; do [ -e "$f" ] || { echo "FAIL live: $f missing (build it in mojo-neuron / mojo-baro first)"; exit 1; }; done
 export MNEURON_DIR=$PWD/.work/neurons-live; rm -rf "$MNEURON_DIR" .work/live-direct
 export MNEURON_LEDGER=${LEDGER:-$HOME/Projects/mojo/mojo-neuron/.work/gpu-ledger.md}
 .work/lens "$Q" 12 8 --out "$MNEURON_DIR" >/dev/null

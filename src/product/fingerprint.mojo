@@ -20,7 +20,7 @@ def fdir(a: Json) -> String:
 
 def signature(a: Json, d: String, name: String) raises -> List[Float64]:
     var tc = String(getenv("NX_TCCAP"))
-    tc = tc if tc.byte_length() > 0 else String(getenv("HOME")) + "/Projects/mojo/mojo-neuron-lanes/features/.work/tccap"
+    tc = tc if tc.byte_length() > 0 else String(getenv("HOME")) + "/Projects/mojo/mojo-neuron/.work/from-lanes/features/tccap"
     var cap = d + "/" + name + ".cap"
     _ = sh("rm -rf " + sq(cap) + "; mkdir -p " + sq(d) + "; " + sq(tc) + " " + sq(a.text("gguf")) + " " + sq(a.text("probe", "tests/fingerprint-probe.txt")) + " " + String(a.get("layer").int()) + " " + sq(cap) + " --windows 1 --seg 64 >/dev/null")
     _ = sound_wav(cap, d + "/" + name + ".wav", 0, 0)
