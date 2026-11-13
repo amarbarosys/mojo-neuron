@@ -147,6 +147,8 @@ def pairs_from_capture(capdir, items, outp):
     """items in capture order -> builder PAIRS.tsv; rec = the last record of each request in the capture (its last prompt position when n = 1)."""
     if DRY: open(outp, "w").write("".join(f"{i}\t{it['right']}\t{it['wrong']}\t{it['gap']}\n" for i, it in enumerate(items))); return
     r = np.fromfile(f"{capdir}/req.i32", dtype=np.int32); ends = [i for i in range(len(r)) if i + 1 == len(r) or r[i + 1] != r[i]]
+    m = len(ends) // max(1, len(items))  # mojo-baro main engine writes the whole capture once per captured layer (identical passes, 2026-11-13): key on pass 1
+    if m > 1 and len(ends) == m * len(items) and all((r[:ends[len(items) - 1] + 1] == r[(ends[len(items) - 1] + 1) * p:(ends[len(items) - 1] + 1) * (p + 1)]).all() for p in range(1, m)): ends = ends[:len(items)]
     if len(ends) != len(items): raise SystemExit(f"FAIL capture: {len(ends)} requests in capture, {len(items)} items")
     open(outp, "w").write("".join(f"{ends[i]}\t{it['right']}\t{it['wrong']}\t{it['gap']}\n" for i, it in enumerate(items)))
 
