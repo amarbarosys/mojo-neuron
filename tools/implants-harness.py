@@ -413,7 +413,7 @@ def unembed_rows(ids):
     t = next(t for t in GGUFReader(GGUF).tensors if t.name == "output.weight"); return np.stack([dequantize(t.data[i:i + 1], t.tensor_type).reshape(-1) for i in ids]).astype(np.float32)
 
 if STAGE == "facts-late" and not exists(f"facts-late{SX}.json"):  # docs/prereg-facts-late.md: same builder, last layers, k = 20, real vs control
-    fs = facts(); unk = jload(f"{W}/facts-known.json")["unknown"]; sub = [fs[i] for i in unk][:20]; LL = [28, 30, 31]; SC = [0.5, 1.0, 2.0, 4.0, 8.0]
+    fs = facts(); unk = jload(f"{W}/facts-known.json")["unknown"]; sub = [fs[i] for i in unk][:20]; LL = [int(x) for x in os.environ.get("LL", "28,30,31").split(",")]; SC = [float(x) for x in os.environ.get("SC", "0.5,1,2,4,8").split(",")]
     gold = [enc(f["gold"])[0] for f in sub]; triv = [enc(q) for q, _ in TRIVIA]
     items, cd, _ = capture_ids("late", [enc(f["exact"]) for f in sub], gold, [None] * 20, LL)
     real, _ = build_full(items, cd, LL, 20, "late"); H, sets = read_sets(real)
